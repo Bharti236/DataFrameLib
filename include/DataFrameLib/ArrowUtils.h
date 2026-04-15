@@ -1,5 +1,6 @@
 #include "Types.h"
 #include <memory>
+#include <vector>
 #include "arrow/api.h"
 
 // ===============================
@@ -46,7 +47,10 @@ std::shared_ptr<arrow::Array> cast_array(
 //   This should be used only when a promotion rule says the cast is valid.
 //   Unsafe or narrowing casts should not be allowed silently.
 
-std::shared_ptr<arrow::Array> replace_nulls_with_sentinel(...);
+std::shared_ptr<arrow::Array> replace_nulls_with_sentinel(
+    const std::shared_ptr<arrow::Array>& input,
+    DataType target_type,
+    const LiteralValue& sentinel);
 //   Not for final semantics.
 //   Prefer not to use sentinels in the library.
 //   This helper should exist only if you need it internally for temporary logic.

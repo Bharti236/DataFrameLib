@@ -1,5 +1,8 @@
 #include<vector>
 #include<string>
+#include <memory>
+#include <optional>
+#include <cstdint>
 #include "Types.h"
 #include "arrow/api.h"
 
@@ -18,6 +21,9 @@
 // - Check types before execution
 // - Preserve null semantics at the expression level
 // - Keep the later Eager and Lazy layers simple
+
+// Optional, not required now: 
+// make cached_type_ mutable later if you want memoization inside infer_type().
 
 // Recommended structure:
 
@@ -50,6 +56,12 @@ class Expression {
 public:
     // Constructors are usually hidden.
     // Use factory helpers such as col(...), lit(...), etc.
+
+    Expression(ExprKind kind,
+               OpKind op = OpKind::Add,
+               std::optional<std::string> name = std::nullopt,
+               std::optional<LiteralValue> literal = std::nullopt,
+               std::vector<std::shared_ptr<Expression>> children = {});
 
     DataType infer_type(const arrow::Schema& schema) const;
     // Checks the expression against an input schema and determines the

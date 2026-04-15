@@ -2,6 +2,7 @@
 
 #include <string>
 #include <variant>
+#include <cstdint>
 
 // ===============================
 // include/DataFrameLib/Types.h
