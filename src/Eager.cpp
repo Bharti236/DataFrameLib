@@ -1,12 +1,3 @@
-class EagerDataFrame {
-    // ???
-
-    // “Use Apache Arrow for all data storage” => 
-    // DataFrame should internally store - Arrow Table
-    // Helps in 1. type safety 2. columnar format
-
-};
-
 // ------------------------------------------------------------
 // src/Eager.cpp
 // ------------------------------------------------------------
@@ -47,10 +38,12 @@ class EagerDataFrame {
 #include "../include/DataFrameLib/Errors.h"
 
 #include <arrow/api.h>
+#include <arrow/array/util.h>
 #include <arrow/compute/api.h>
 
 #include <algorithm>
 #include <cstddef>
+#include <map>
 #include <memory>
 #include <sstream>
 #include <stdexcept>
@@ -67,11 +60,34 @@ std::shared_ptr<arrow::Array> combine_single_column(const std::shared_ptr<arrow:
     if (!chunked) {
         eager_fail("encountered null chunked array");
     }
-    auto res = chunked->CombineChunks(arrow::default_memory_pool());
-    if (!res.ok()) {
-        eager_fail("failed to combine Arrow chunks: " + res.status().ToString());
+
+    if (chunked->num_chunks() == 0) {
+        auto empty_res = arrow::MakeEmptyArray(chunked->type(), arrow::default_memory_pool());
+        if (!empty_res.ok()) {
+            eager_fail("failed to materialize empty Arrow array: " + empty_res.status().ToString());
+        }
+        return empty_res.ValueOrDie();
     }
-    return *std::move(res);
+
+    if (chunked->num_chunks() == 1) {
+        return chunked->chunk(0);
+    }
+
+    auto table = arrow::Table::Make(
+        arrow::schema({arrow::field("__combined__", chunked->type())}),
+        {chunked}
+    );
+    auto combined_res = table->CombineChunks(arrow::default_memory_pool());
+    if (!combined_res.ok()) {
+        eager_fail("failed to combine Arrow chunks: " + combined_res.status().ToString());
+    }
+
+    auto combined_column = combined_res.ValueOrDie()->column(0);
+    if (!combined_column || combined_column->num_chunks() != 1) {
+        eager_fail("combined Arrow column did not materialize into a single chunk");
+    }
+
+    return combined_column->chunk(0);
 }
 
 std::shared_ptr<arrow::Table> make_table_from_columns(
@@ -79,11 +95,7 @@ std::shared_ptr<arrow::Table> make_table_from_columns(
     const std::vector<std::shared_ptr<arrow::ChunkedArray>>& columns) {
 
     auto schema = arrow::schema(fields);
-    auto res = arrow::Table::Make(schema, columns);
-    if (!res.ok()) {
-        eager_fail("failed to build Arrow table: " + res.status().ToString());
-    }
-    return *std::move(res);
+    return arrow::Table::Make(std::move(schema), columns);
 }
 
 } // namespace
@@ -98,7 +110,7 @@ DataType EagerDataFrame::arrow_type_to_datatype(const std::shared_ptr<arrow::Dat
         case arrow::Type::INT64:        return DataType::Int64;
         case arrow::Type::FLOAT:        return DataType::Float32;
         case arrow::Type::DOUBLE:       return DataType::Float64;
-        case arrow::Type::UTF8:
+        case arrow::Type::STRING:
         case arrow::Type::LARGE_STRING: return DataType::String;
         case arrow::Type::BOOL:         return DataType::Boolean;
         default:
@@ -158,14 +170,31 @@ EagerDataFrame::EagerDataFrame(std::shared_ptr<arrow::Table> table)
 }
 
 EagerDataFrame::EagerDataFrame(const std::map<std::string, Column>& columns) {
-    // Your current Column API does not expose raw Arrow arrays publicly.
-    // This constructor is therefore only safely implementable if Column gets
-    // an accessor like `std::shared_ptr<arrow::Array> array() const`.
-    // Keeping this constructor compile-safe and explicit.
-    throw DataFrameError(
-        "EagerDataFrame(map<string,Column>) is not implementable with the current Column API "
-        "(missing access to underlying Arrow arrays)"
-    );
+    std::vector<std::shared_ptr<arrow::Field>> fields;
+    std::vector<std::shared_ptr<arrow::ChunkedArray>> arrays;
+    fields.reserve(columns.size());
+    arrays.reserve(columns.size());
+
+    std::int64_t expected_rows = -1;
+    for (const auto& [name, column] : columns) {
+        if (!column.data()) {
+            throw SchemaError("column '" + name + "' has null Arrow data");
+        }
+
+        const auto rows = static_cast<std::int64_t>(column.size());
+        if (expected_rows < 0) {
+            expected_rows = rows;
+        } else if (expected_rows != rows) {
+            throw DimensionError("column length mismatch while constructing eager dataframe");
+        }
+
+        fields.push_back(arrow::field(name, column.data()->type()));
+        arrays.push_back(std::make_shared<arrow::ChunkedArray>(column.data()));
+    }
+
+    table_ = make_table_from_columns(fields, arrays);
+    schema_ = table_->schema();
+    validate_table(table_);
 }
 
 std::size_t EagerDataFrame::row_count() const {

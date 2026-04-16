@@ -1,3 +1,5 @@
+#pragma once
+
 #include "Types.h"
 #include <memory>
 #include <vector>

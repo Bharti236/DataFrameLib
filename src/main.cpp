@@ -1,19 +1,34 @@
 #include "../include/DataFrameLib/Eager.h"
-// #include "../include/DataFrameLib/Lazy.h"
+
+#include <exception>
 #include <iostream>
+#include <string>
 
-using namespace DataFrameLib;
+namespace {
 
-int main() {
-    // --- Eager Mode Demo ---
-    std::cout << "Running Eager Mode..." << std::endl;
-    auto df = EagerDataFrame::read_csv("data.csv");
-    
-    // auto result = df.filter(col("age") > 30)
-    // select
-    // with_column
-    // return new DataFrame
-    // user expects original to remain intact
+bool has_suffix(const std::string& value, const std::string& suffix) {
+    return value.size() >= suffix.size() &&
+           value.compare(value.size() - suffix.size(), suffix.size(), suffix) == 0;
+}
 
-    return 0;
+} // namespace
+
+int main(int argc, char** argv) {
+    if (argc != 2) {
+        std::cerr << "Usage: ./df_app <input.csv|input.parquet|input.pq>" << std::endl;
+        return 1;
+    }
+
+    const std::string path = argv[1];
+
+    try {
+        EagerDataFrame df = has_suffix(path, ".csv")
+            ? EagerDataFrame::read_csv(path)
+            : EagerDataFrame::read_parquet(path);
+        std::cout << df.to_string();
+        return 0;
+    } catch (const std::exception& ex) {
+        std::cerr << ex.what() << std::endl;
+        return 2;
+    }
 }

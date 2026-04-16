@@ -1,3 +1,5 @@
+#pragma once
+
 // Strict type definitions (int32, string, etc.)
 
 #include <string>

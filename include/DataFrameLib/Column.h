@@ -1,3 +1,5 @@
+#pragma once
+
 #include <string>
 #include <vector>
 #include <memory>
@@ -32,6 +34,7 @@ public:
     // Basic metadata access.
     const std::string& name() const;
     DataType type() const;
+    const std::shared_ptr<arrow::Array>& data() const;
     std::size_t size() const;
     std::size_t null_count() const;
     bool empty() const;

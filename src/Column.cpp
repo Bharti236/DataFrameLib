@@ -24,13 +24,6 @@ bool is_orderable(DataType t) {
     return is_numeric(t) || is_string(t);
 }
 
-bool is_numeric_literal(const LiteralValue& v) {
-    return std::holds_alternative<int32_t>(v) ||
-           std::holds_alternative<int64_t>(v) ||
-           std::holds_alternative<float>(v) ||
-           std::holds_alternative<double>(v);
-}
-
 long double to_long_double(const LiteralValue& v) {
     if (std::holds_alternative<int32_t>(v)) return static_cast<long double>(std::get<int32_t>(v));
     if (std::holds_alternative<int64_t>(v)) return static_cast<long double>(std::get<int64_t>(v));
@@ -146,8 +139,8 @@ Column unary_numeric_map(const Column& self,
             continue;
         }
 
-        auto v = read_value_from_array(self.data_, self.type_, i);
-        out.emplace_back(func(v));
+        auto v = read_value_from_array(self.data(), self.type(), i);
+        out.emplace_back(from_numeric_result(func(v), result_type));
     }
 
     return Column(self.name(), result_type,
@@ -167,7 +160,7 @@ Column unary_string_map(const Column& self,
             continue;
         }
 
-        auto v = read_value_from_array(self.data_, self.type_, i);
+        auto v = read_value_from_array(self.data(), self.type(), i);
         out.emplace_back(func(std::get<std::string>(v)));
     }
 
@@ -189,9 +182,9 @@ Column binary_compare_map(const Column& lhs,
     std::vector<LiteralValue> out;
     out.reserve(lhs.size());
 
-    const bool both_numeric = is_numeric(lhs.type_) && is_numeric(rhs.type_);
-    const bool both_string = is_string(lhs.type_) && is_string(rhs.type_);
-    const bool both_bool = is_boolean(lhs.type_) && is_boolean(rhs.type_);
+    const bool both_numeric = is_numeric(lhs.type()) && is_numeric(rhs.type());
+    const bool both_string = is_string(lhs.type()) && is_string(rhs.type());
+    const bool both_bool = is_boolean(lhs.type()) && is_boolean(rhs.type());
 
     for (std::size_t i = 0; i < lhs.size(); ++i) {
         if (lhs.is_null(i) || rhs.is_null(i)) {
@@ -199,8 +192,8 @@ Column binary_compare_map(const Column& lhs,
             continue;
         }
 
-        auto lv = read_value_from_array(lhs.data_, lhs.type_, i);
-        auto rv = read_value_from_array(rhs.data_, rhs.type_, i);
+        auto lv = read_value_from_array(lhs.data(), lhs.type(), i);
+        auto rv = read_value_from_array(rhs.data(), rhs.type(), i);
 
         bool result = false;
         if (both_numeric) {
@@ -211,7 +204,7 @@ Column binary_compare_map(const Column& lhs,
             result = bool_cmp(std::get<bool>(lv), std::get<bool>(rv));
         } else {
             throw TypeError("invalid comparison '" + op_name + "' between " +
-                            type_name(lhs.type_) + " and " + type_name(rhs.type_));
+                            type_name(lhs.type()) + " and " + type_name(rhs.type()));
         }
 
         out.emplace_back(result);
@@ -240,8 +233,8 @@ Column binary_numeric_map(const Column& lhs,
             continue;
         }
 
-        auto lv = read_value_from_array(lhs.data_, lhs.type_, i);
-        auto rv = read_value_from_array(rhs.data_, rhs.type_, i);
+        auto lv = read_value_from_array(lhs.data(), lhs.type(), i);
+        auto rv = read_value_from_array(rhs.data(), rhs.type(), i);
         long double value = func(to_long_double(lv), to_long_double(rv));
         out.emplace_back(from_numeric_result(value, result_type));
     }
@@ -268,8 +261,8 @@ Column binary_bool_map(const Column& lhs,
             continue;
         }
 
-        auto lv = read_value_from_array(lhs.data_, lhs.type_, i);
-        auto rv = read_value_from_array(rhs.data_, rhs.type_, i);
+        auto lv = read_value_from_array(lhs.data(), lhs.type(), i);
+        auto rv = read_value_from_array(rhs.data(), rhs.type(), i);
         out.emplace_back(func(std::get<bool>(lv), std::get<bool>(rv)));
     }
 
@@ -300,6 +293,10 @@ const std::string& Column::name() const {
 
 DataType Column::type() const {
     return type_;
+}
+
+const std::shared_ptr<arrow::Array>& Column::data() const {
+    return data_;
 }
 
 std::size_t Column::size() const {

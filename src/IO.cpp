@@ -36,12 +36,14 @@
 #include <arrow/api.h>
 #include <arrow/csv/api.h>
 #include <arrow/io/api.h>
+#include <arrow/util/config.h>
 #include <parquet/arrow/reader.h>
 #include <parquet/arrow/writer.h>
 
 #include <memory>
 #include <stdexcept>
 #include <string>
+#include <unordered_set>
 
 namespace {
 
@@ -55,6 +57,30 @@ void check_arrow_status(const arrow::Status& st, const std::string& op) {
     }
 }
 
+arrow::Result<std::shared_ptr<arrow::csv::TableReader>> make_csv_table_reader(
+    const std::shared_ptr<arrow::io::InputStream>& input,
+    const arrow::csv::ReadOptions& read_options,
+    const arrow::csv::ParseOptions& parse_options,
+    const arrow::csv::ConvertOptions& convert_options) {
+#if defined(ARROW_VERSION_MAJOR) && ARROW_VERSION_MAJOR >= 13
+    return arrow::csv::TableReader::Make(
+        arrow::io::default_io_context(),
+        input,
+        read_options,
+        parse_options,
+        convert_options
+    );
+#else
+    return arrow::csv::TableReader::Make(
+        arrow::default_memory_pool(),
+        input,
+        read_options,
+        parse_options,
+        convert_options
+    );
+#endif
+}
+
 DataType arrow_type_to_datatype_impl(const std::shared_ptr<arrow::DataType>& type) {
     if (!type) {
         throw TypeError("null Arrow type");
@@ -65,7 +91,7 @@ DataType arrow_type_to_datatype_impl(const std::shared_ptr<arrow::DataType>& typ
         case arrow::Type::INT64:        return DataType::Int64;
         case arrow::Type::FLOAT:        return DataType::Float32;
         case arrow::Type::DOUBLE:       return DataType::Float64;
-        case arrow::Type::UTF8:
+        case arrow::Type::STRING:
         case arrow::Type::LARGE_STRING: return DataType::String;
         case arrow::Type::BOOL:         return DataType::Boolean;
         default:
@@ -121,8 +147,7 @@ EagerDataFrame read_csv(const std::string& path) {
     auto parse_options = arrow::csv::ParseOptions::Defaults();
     auto convert_options = arrow::csv::ConvertOptions::Defaults();
 
-    auto reader_res = arrow::csv::TableReader::Make(
-        arrow::default_memory_pool(),
+    auto reader_res = make_csv_table_reader(
         input,
         read_options,
         parse_options,
@@ -150,13 +175,17 @@ EagerDataFrame read_parquet(const std::string& path) {
     }
     std::shared_ptr<arrow::io::ReadableFile> input = *std::move(input_res);
 
-    std::shared_ptr<parquet::arrow::FileReader> parquet_reader;
-    auto open_status = parquet::arrow::OpenFile(
-        input,
-        arrow::default_memory_pool(),
-        &parquet_reader
-    );
+    parquet::arrow::FileReaderBuilder builder;
+    auto open_status = builder.Open(input);
     check_arrow_status(open_status, "read_parquet");
+    builder.memory_pool(arrow::default_memory_pool());
+
+    auto reader_res = builder.Build();
+    if (!reader_res.ok()) {
+        io_fail("read_parquet", "failed to create parquet reader for '" + path + "': " +
+                                    reader_res.status().ToString());
+    }
+    std::unique_ptr<parquet::arrow::FileReader> parquet_reader = std::move(reader_res).ValueOrDie();
 
     std::shared_ptr<arrow::Table> table;
     auto read_status = parquet_reader->ReadTable(&table);
