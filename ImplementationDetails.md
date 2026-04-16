@@ -29,3 +29,16 @@ It should **work for this project**. The spec says the library supports only `in
 So a bare `lit(nullptr)` is best treated as an **untyped null placeholder**, not as a value with its own intrinsic type. That is consistent with the assignment, because the required type system has no `Null` type, and the expression system only needs `lit(value)` as a core expression constructor. 
 
 The only caveat is practical: `infer_type(lit(nullptr))` by itself cannot return one of the six allowed types without extra context. That is not a project problem unless your own tests or API usage specifically expect standalone null literals to be typed. For the assignment spec, context-sensitive null handling is the safer design. 
+
+--------------------------------
+
+a self-contained eager frame layer that is strict on Arrow types, validates eagerly, and keeps the forward-declaration boundary clean. Some expression-driven methods need your Expression evaluation API to be exact, so I’ll either wire them conservatively or isolate them behind clearly marked hooks.
+
+The eager/table-backed parts are fully wired, the Arrow validation is strict, and the I/O layer maps Arrow types into your allowed logical types immediately.
+
+The only place I had to leave as a hard runtime error is anything that needs a real Expression execution engine, because the Expression API you shared exposes type inference but not evaluation.
+
+The two important gaps to notice are the optional EagerDataFrame(const std::map<std::string, Column>&) constructor and all expression-evaluation methods. Those need either a raw Arrow accessor on Column or an evaluation API on Expression.
+
+----------------------------------
+

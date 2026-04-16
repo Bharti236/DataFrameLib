@@ -16,6 +16,27 @@
 // - They must not create lazy plans.
 // - They must not defer any work.
 //
+#pragma once
+
+#include <memory>
+#include <string>
+
+namespace arrow {
+class Table;
+}
+
+class EagerDataFrame;
+
+EagerDataFrame read_csv(const std::string& path);
+EagerDataFrame read_parquet(const std::string& path);
+
+void write_csv(const EagerDataFrame& df, const std::string& path);
+void write_parquet(const EagerDataFrame& df, const std::string& path);
+
+std::shared_ptr<arrow::Table> to_arrow_table(const EagerDataFrame& df);
+EagerDataFrame from_arrow_table(std::shared_ptr<arrow::Table> table);
+
+
 // Public API expected here:
 //
 // EagerDataFrame read_csv(const std::string& path);
