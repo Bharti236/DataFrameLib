@@ -82,6 +82,13 @@ public:
     Expression with_alias(const std::string& name) const;
     // Returns a new expression that produces the same value with a new name.
 
+    // Introspection helpers used by executors / optimizers.
+    ExprKind kind() const { return kind_; }
+    OpKind op() const { return op_; }
+    const std::optional<std::string>& name() const { return name_; }
+    const std::optional<LiteralValue>& literal() const { return literal_; }
+    const std::vector<std::shared_ptr<Expression>>& children() const { return children_; }
+
 private:
     // Internal tree storage.
     ExprKind kind_;

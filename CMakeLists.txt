@@ -53,3 +53,8 @@ add_executable(df_smoke_tests tests/eager_smoke.cpp)
 target_link_libraries(df_smoke_tests PRIVATE DataFrameEngine)
 
 add_test(NAME eager_smoke COMMAND df_smoke_tests)
+
+add_executable(df_lazy_smoke_tests tests/lazy_smoke.cpp)
+target_link_libraries(df_lazy_smoke_tests PRIVATE DataFrameEngine)
+
+add_test(NAME lazy_smoke COMMAND df_lazy_smoke_tests)
