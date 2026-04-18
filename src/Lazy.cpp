@@ -17,6 +17,7 @@
 #include "../include/DataFrameLib/ArrowUtils.h"
 #include "../include/DataFrameLib/Errors.h"
 #include "../include/DataFrameLib/IO.h"
+#include "../include/DataFrameLib/Optimizer.h"
 
 #include <graphviz/cgraph.h>
 #include <graphviz/gvc.h>
@@ -1002,11 +1003,21 @@ EagerDataFrame execute_plan_impl(const LazyPlanNodePtr& plan,
 
     EagerDataFrame result = [&]() -> EagerDataFrame {
         switch (plan->kind) {
-            case LazyNodeKind::ScanCsv:
-                return read_csv(plan->path);
+            case LazyNodeKind::ScanCsv: {
+                EagerDataFrame df = read_csv(plan->path);
+                if (!plan->columns.empty()) {
+                    df = df.select(plan->columns);
+                }
+                return df;
+            }
 
-            case LazyNodeKind::ScanParquet:
-                return read_parquet(plan->path);
+            case LazyNodeKind::ScanParquet: {
+                EagerDataFrame df = read_parquet(plan->path);
+                if (!plan->columns.empty()) {
+                    df = df.select(plan->columns);
+                }
+                return df;
+            }
 
             case LazyNodeKind::SelectColumns:
                 return recurse(plan->inputs.at(0)).select(plan->columns);
@@ -1182,8 +1193,10 @@ LazyDataFrame LazyDataFrame::head(std::size_t n) const {
 }
 
 EagerDataFrame LazyDataFrame::collect() const {
+    QueryOptimizer optimizer;
+    LazyPlanNodePtr optimized_plan = optimizer.optimize(plan_);
     std::unordered_map<std::size_t, EagerDataFrame> cache;
-    return execute_plan_impl(plan_, cache);
+    return execute_plan_impl(optimized_plan, cache);
 }
 
 void LazyDataFrame::sink_csv(const std::string& path) const {
@@ -1195,6 +1208,10 @@ void LazyDataFrame::sink_parquet(const std::string& path) const {
 }
 
 void LazyDataFrame::explain(const std::string& path) const {
+    QueryOptimizer optimizer;
+    OptimizationReport report = optimizer.optimize_with_report(plan_);
+    LazyPlanNodePtr rendered_plan = report.optimized_root ? report.optimized_root : plan_;
+
     GVC_t* context = gvContext();
     if (!context) {
         lazy_fail("failed to initialize Graphviz context");
@@ -1207,7 +1224,7 @@ void LazyDataFrame::explain(const std::string& path) const {
     }
 
     std::unordered_map<std::size_t, Agnode_t*> graph_nodes;
-    add_graphviz_subgraph(plan_, graph, graph_nodes);
+    add_graphviz_subgraph(rendered_plan, graph, graph_nodes);
 
     if (gvLayout(context, graph, "dot") != 0) {
         agclose(graph);
