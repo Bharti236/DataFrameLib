@@ -66,6 +66,12 @@ public:
                         const std::vector<std::string>& on,
                         JoinType how) const;
 
+    // Convenience overload matching the assignment examples that pass join
+    // kinds as strings such as "inner" or "left".
+    EagerDataFrame join(const EagerDataFrame& other,
+                        const std::vector<std::string>& on,
+                        const std::string& how) const;
+
     EagerDataFrame sort(const std::vector<std::string>& columns,
                         bool ascending = true) const;
 
@@ -85,6 +91,11 @@ private:
     static DataType arrow_type_to_datatype(const std::shared_ptr<arrow::DataType>& type);
     static void validate_table(const std::shared_ptr<arrow::Table>& table);
 };
+
+// Public helper matching the assignment's `from_columns(map)` requirement.
+// This is just the free-function form of the existing constructor so tests can
+// build an eager frame without naming the class constructor explicitly.
+EagerDataFrame from_columns(const std::map<std::string, Column>& columns);
 
 // // EagerDataFrame class
 

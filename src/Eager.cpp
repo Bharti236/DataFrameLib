@@ -42,6 +42,7 @@
 #include <arrow/compute/api.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cstddef>
 #include <map>
 #include <memory>
@@ -54,6 +55,30 @@ namespace {
 
 [[noreturn]] void eager_fail(const std::string& msg) {
     throw DataFrameError("EagerDataFrame: " + msg);
+}
+
+std::string lowercase_ascii(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(),
+                   [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+    return value;
+}
+
+JoinType parse_join_type_or_throw(const std::string& how) {
+    const std::string normalized = lowercase_ascii(how);
+    if (normalized == "inner") {
+        return JoinType::Inner;
+    }
+    if (normalized == "left") {
+        return JoinType::Left;
+    }
+    if (normalized == "right") {
+        return JoinType::Right;
+    }
+    if (normalized == "full") {
+        return JoinType::Full;
+    }
+
+    throw DataFrameError("invalid join type: " + how);
 }
 
 std::shared_ptr<arrow::Array> combine_single_column(const std::shared_ptr<arrow::ChunkedArray>& chunked) {
@@ -290,6 +315,12 @@ EagerDataFrame EagerDataFrame::join(const EagerDataFrame& other,
     throw DataFrameError("join(...) is not implemented yet in this eager Arrow-only layer");
 }
 
+EagerDataFrame EagerDataFrame::join(const EagerDataFrame& other,
+                                    const std::vector<std::string>& on,
+                                    const std::string& how) const {
+    return join(other, on, parse_join_type_or_throw(how));
+}
+
 EagerDataFrame EagerDataFrame::sort(const std::vector<std::string>& columns,
                                     bool ascending) const {
     (void)columns;
@@ -359,4 +390,8 @@ EagerDataFrame EagerDataFrame::read_csv(const std::string& path) {
 
 EagerDataFrame EagerDataFrame::read_parquet(const std::string& path) {
     return ::read_parquet(path);
+}
+
+EagerDataFrame from_columns(const std::map<std::string, Column>& columns) {
+    return EagerDataFrame(columns);
 }

@@ -499,7 +499,67 @@ std::string Expression::alias_name() const {
 }
 
 Expression Expression::with_alias(const std::string& name) const {
-    return alias(*this, name);
+    return ::alias(*this, name);
+}
+
+Expression Expression::alias(const std::string& name) const {
+    return ::alias(*this, name);
+}
+
+Expression Expression::abs() const {
+    return ::abs(*this);
+}
+
+Expression Expression::is_null() const {
+    return ::is_null(*this);
+}
+
+Expression Expression::is_not_null() const {
+    return ::is_not_null(*this);
+}
+
+Expression Expression::length() const {
+    return ::length(*this);
+}
+
+Expression Expression::contains(const std::string& needle) const {
+    return ::contains(*this, needle);
+}
+
+Expression Expression::starts_with(const std::string& prefix) const {
+    return ::starts_with(*this, prefix);
+}
+
+Expression Expression::ends_with(const std::string& suffix) const {
+    return ::ends_with(*this, suffix);
+}
+
+Expression Expression::to_lower() const {
+    return ::to_lower(*this);
+}
+
+Expression Expression::to_upper() const {
+    return ::to_upper(*this);
+}
+
+Expression Expression::sum() const {
+    return ::sum(*this);
+}
+
+Expression Expression::mean() const {
+    return ::mean(*this);
+}
+
+Expression Expression::count() const {
+    return ::count(*this);
+}
+
+Expression Expression::min() const {
+    return ::min(*this);
+}
+
+Expression Expression::max() const {
+    return ::max(*this);
 }
 
 // -------------------------

@@ -82,6 +82,26 @@ public:
     Expression with_alias(const std::string& name) const;
     // Returns a new expression that produces the same value with a new name.
 
+    // Convenience member wrappers that mirror the assignment examples such as
+    // col("x").alias("y"), col("name").to_upper(), and col("salary").mean().
+    // The existing free-function helpers remain available; these methods just
+    // forward to the same expression builders so both API styles stay in sync.
+    Expression alias(const std::string& name) const;
+    Expression abs() const;
+    Expression is_null() const;
+    Expression is_not_null() const;
+    Expression length() const;
+    Expression contains(const std::string& needle) const;
+    Expression starts_with(const std::string& prefix) const;
+    Expression ends_with(const std::string& suffix) const;
+    Expression to_lower() const;
+    Expression to_upper() const;
+    Expression sum() const;
+    Expression mean() const;
+    Expression count() const;
+    Expression min() const;
+    Expression max() const;
+
     // Introspection helpers used by executors / optimizers.
     ExprKind kind() const { return kind_; }
     OpKind op() const { return op_; }

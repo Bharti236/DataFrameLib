@@ -138,6 +138,12 @@ public:
                        const std::vector<std::string>& on,
                        JoinType how) const;
 
+    // Convenience overload matching the assignment examples that pass join
+    // kinds as strings such as "inner" or "left".
+    LazyDataFrame join(const LazyDataFrame& other,
+                       const std::vector<std::string>& on,
+                       const std::string& how) const;
+
     LazyDataFrame sort(const std::vector<std::string>& columns,
                        bool ascending = true) const;
 

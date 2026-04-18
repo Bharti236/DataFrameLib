@@ -22,6 +22,7 @@
 #include <graphviz/gvc.h>
 
 #include <algorithm>
+#include <cctype>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -39,6 +40,30 @@ namespace {
 
 [[noreturn]] void lazy_fail(const std::string& message) {
     throw DataFrameError("LazyDataFrame: " + message);
+}
+
+std::string lowercase_ascii(std::string value) {
+    std::transform(value.begin(), value.end(), value.begin(),
+                   [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
+    return value;
+}
+
+JoinType parse_join_type_or_throw(const std::string& how) {
+    const std::string normalized = lowercase_ascii(how);
+    if (normalized == "inner") {
+        return JoinType::Inner;
+    }
+    if (normalized == "left") {
+        return JoinType::Left;
+    }
+    if (normalized == "right") {
+        return JoinType::Right;
+    }
+    if (normalized == "full") {
+        return JoinType::Full;
+    }
+
+    throw DataFrameError("invalid join type: " + how);
 }
 
 std::size_t next_plan_node_id() {
@@ -1134,6 +1159,12 @@ LazyDataFrame LazyDataFrame::join(const LazyDataFrame& other,
     node->columns = on;
     node->join_type = how;
     return LazyDataFrame(std::move(node));
+}
+
+LazyDataFrame LazyDataFrame::join(const LazyDataFrame& other,
+                                  const std::vector<std::string>& on,
+                                  const std::string& how) const {
+    return join(other, on, parse_join_type_or_throw(how));
 }
 
 LazyDataFrame LazyDataFrame::sort(const std::vector<std::string>& columns,
