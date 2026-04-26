@@ -36,16 +36,17 @@
 #include "../include/DataFrameLib/IO.h"
 #include "../include/DataFrameLib/Eager.h"
 #include "../include/DataFrameLib/Errors.h"
+#include "../include/DataFrameLib/Lazy.h"
 
 #include <arrow/api.h>
 #include <arrow/array/util.h>
 #include <arrow/compute/api.h>
 
 #include <algorithm>
-#include <cctype>
 #include <cstddef>
 #include <map>
 #include <memory>
+#include <optional>
 #include <sstream>
 #include <stdexcept>
 #include <unordered_set>
@@ -55,30 +56,6 @@ namespace {
 
 [[noreturn]] void eager_fail(const std::string& msg) {
     throw DataFrameError("EagerDataFrame: " + msg);
-}
-
-std::string lowercase_ascii(std::string value) {
-    std::transform(value.begin(), value.end(), value.begin(),
-                   [](unsigned char ch) { return static_cast<char>(std::tolower(ch)); });
-    return value;
-}
-
-JoinType parse_join_type_or_throw(const std::string& how) {
-    const std::string normalized = lowercase_ascii(how);
-    if (normalized == "inner") {
-        return JoinType::Inner;
-    }
-    if (normalized == "left") {
-        return JoinType::Left;
-    }
-    if (normalized == "right") {
-        return JoinType::Right;
-    }
-    if (normalized == "full") {
-        return JoinType::Full;
-    }
-
-    throw DataFrameError("invalid join type: " + how);
 }
 
 std::shared_ptr<arrow::Array> combine_single_column(const std::shared_ptr<arrow::ChunkedArray>& chunked) {
@@ -230,6 +207,14 @@ std::size_t EagerDataFrame::column_count() const {
     return table_ ? static_cast<std::size_t>(table_->num_columns()) : 0;
 }
 
+std::size_t EagerDataFrame::num_rows() const {
+    return row_count();
+}
+
+std::size_t EagerDataFrame::num_columns() const {
+    return column_count();
+}
+
 const arrow::Schema& EagerDataFrame::schema() const {
     if (!schema_) {
         throw SchemaError("schema is null");
@@ -276,27 +261,16 @@ EagerDataFrame EagerDataFrame::select(const std::vector<std::string>& columns) c
 }
 
 EagerDataFrame EagerDataFrame::select(const std::vector<Expression>& expressions) const {
-    (void)expressions;
-    throw DataFrameError(
-        "select(vector<Expression>) requires an expression execution engine; "
-        "the current Expression API exposes infer_type() but not evaluation"
-    );
+    return lazy_from_arrow_table(table_).select(expressions).collect();
 }
 
 EagerDataFrame EagerDataFrame::filter(const Expression& predicate) const {
-    (void)predicate;
-    throw DataFrameError(
-        "filter(Expression) requires expression evaluation support; not available yet"
-    );
+    return lazy_from_arrow_table(table_).filter(predicate).collect();
 }
 
 EagerDataFrame EagerDataFrame::with_column(const std::string& name,
                                           const Expression& expr) const {
-    (void)name;
-    (void)expr;
-    throw DataFrameError(
-        "with_column(name, expr) requires expression evaluation support; not available yet"
-    );
+    return lazy_from_arrow_table(table_).with_column(name, expr).collect();
 }
 
 EagerGroupBy EagerDataFrame::group_by(const std::vector<std::string>& keys) const {
@@ -309,23 +283,22 @@ EagerGroupBy EagerDataFrame::group_by(const std::vector<std::string>& keys) cons
 EagerDataFrame EagerDataFrame::join(const EagerDataFrame& other,
                                     const std::vector<std::string>& on,
                                     JoinType how) const {
-    (void)other;
-    (void)on;
-    (void)how;
-    throw DataFrameError("join(...) is not implemented yet in this eager Arrow-only layer");
+    return lazy_from_arrow_table(table_)
+        .join(lazy_from_arrow_table(other.to_arrow_table()), on, how)
+        .collect();
 }
 
 EagerDataFrame EagerDataFrame::join(const EagerDataFrame& other,
                                     const std::vector<std::string>& on,
                                     const std::string& how) const {
-    return join(other, on, parse_join_type_or_throw(how));
+    return lazy_from_arrow_table(table_)
+        .join(lazy_from_arrow_table(other.to_arrow_table()), on, how)
+        .collect();
 }
 
 EagerDataFrame EagerDataFrame::sort(const std::vector<std::string>& columns,
                                     bool ascending) const {
-    (void)columns;
-    (void)ascending;
-    throw DataFrameError("sort(...) is not implemented yet in this eager Arrow-only layer");
+    return lazy_from_arrow_table(table_).sort(columns, ascending).collect();
 }
 
 EagerDataFrame EagerDataFrame::head(std::size_t n) const {
@@ -378,10 +351,23 @@ EagerGroupBy::EagerGroupBy(const EagerDataFrame& parent, std::vector<std::string
 }
 
 EagerDataFrame EagerGroupBy::aggregate(const std::map<std::string, Expression>& aggs) const {
-    (void)aggs;
-    throw DataFrameError(
-        "group_by(...).aggregate(...) requires expression aggregation evaluation; not available yet"
-    );
+    return lazy_from_arrow_table(parent_->to_arrow_table())
+        .group_by(keys_)
+        .aggregate(aggs)
+        .collect();
+}
+
+EagerDataFrame EagerGroupBy::aggregate(
+    const std::vector<std::pair<std::string, std::string>>& aggs) const {
+    return lazy_from_arrow_table(parent_->to_arrow_table())
+        .group_by(keys_)
+        .aggregate(aggs)
+        .collect();
+}
+
+EagerDataFrame EagerGroupBy::aggregate(
+    std::initializer_list<std::pair<std::string, std::string>> aggs) const {
+    return aggregate(std::vector<std::pair<std::string, std::string>>(aggs));
 }
 
 EagerDataFrame EagerDataFrame::read_csv(const std::string& path) {
@@ -394,4 +380,39 @@ EagerDataFrame EagerDataFrame::read_parquet(const std::string& path) {
 
 EagerDataFrame from_columns(const std::map<std::string, Column>& columns) {
     return EagerDataFrame(columns);
+}
+
+EagerDataFrame from_columns(
+    const std::vector<std::pair<std::string, std::shared_ptr<arrow::Array>>>& columns) {
+    std::vector<std::shared_ptr<arrow::Field>> fields;
+    std::vector<std::shared_ptr<arrow::ChunkedArray>> arrays;
+    fields.reserve(columns.size());
+    arrays.reserve(columns.size());
+
+    std::optional<int64_t> expected_rows;
+    for (const auto& [name, array] : columns) {
+        if (!array) {
+            throw SchemaError("column '" + name + "' has null Arrow data");
+        }
+
+        const int64_t row_count = array->length();
+        if (!expected_rows.has_value()) {
+            expected_rows = row_count;
+        } else if (*expected_rows != row_count) {
+            throw DimensionError("column length mismatch while constructing eager dataframe");
+        }
+
+        fields.push_back(arrow::field(name, array->type()));
+        arrays.push_back(std::make_shared<arrow::ChunkedArray>(array));
+    }
+
+    auto table = make_table_from_columns(fields, arrays);
+    if (!expected_rows.has_value()) {
+        table = arrow::Table::Make(
+            arrow::schema({}),
+            std::vector<std::shared_ptr<arrow::ChunkedArray>>{},
+            0
+        );
+    }
+    return from_arrow_table(std::move(table));
 }

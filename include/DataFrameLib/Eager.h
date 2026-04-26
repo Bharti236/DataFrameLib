@@ -4,8 +4,10 @@
 #include <arrow/table.h>
 
 #include <cstddef>
+#include <initializer_list>
 #include <map>
 #include <memory>
+#include <utility>
 #include <string>
 #include <vector>
 
@@ -27,6 +29,8 @@ public:
     EagerGroupBy(const EagerDataFrame& parent, std::vector<std::string> keys);
 
     EagerDataFrame aggregate(const std::map<std::string, Expression>& aggs) const;
+    EagerDataFrame aggregate(const std::vector<std::pair<std::string, std::string>>& aggs) const;
+    EagerDataFrame aggregate(std::initializer_list<std::pair<std::string, std::string>> aggs) const;
 
 private:
     const EagerDataFrame* parent_;
@@ -45,6 +49,8 @@ public:
 
     std::size_t row_count() const;
     std::size_t column_count() const;
+    std::size_t num_rows() const;
+    std::size_t num_columns() const;
 
     const arrow::Schema& schema() const;
     std::shared_ptr<arrow::Table> to_arrow_table() const;
@@ -53,6 +59,9 @@ public:
     Column column(const std::string& name) const;
 
     EagerDataFrame select(const std::vector<std::string>& columns) const;
+    EagerDataFrame select(std::initializer_list<std::string> columns) const {
+        return select(std::vector<std::string>(columns));
+    }
     EagerDataFrame select(const std::vector<Expression>& expressions) const;
 
     EagerDataFrame filter(const Expression& predicate) const;
@@ -96,6 +105,7 @@ private:
 // This is just the free-function form of the existing constructor so tests can
 // build an eager frame without naming the class constructor explicitly.
 EagerDataFrame from_columns(const std::map<std::string, Column>& columns);
+EagerDataFrame from_columns(const std::vector<std::pair<std::string, std::shared_ptr<arrow::Array>>>& columns);
 
 // // EagerDataFrame class
 

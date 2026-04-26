@@ -396,13 +396,27 @@ Column Column::apply_abs() const {
 }
 
 Column Column::apply_is_null() const {
-    return unary_boolean_map(*this, "is_null",
-                             [this](std::size_t i) { return this->is_null(i); });
+    std::vector<LiteralValue> out;
+    out.reserve(size());
+
+    for (std::size_t i = 0; i < size(); ++i) {
+        out.emplace_back(is_null(i));
+    }
+
+    return Column(name_, DataType::Boolean,
+                  build_array_or_throw(out, DataType::Boolean, "is_null"));
 }
 
 Column Column::apply_is_not_null() const {
-    return unary_boolean_map(*this, "is_not_null",
-                             [this](std::size_t i) { return !this->is_null(i); });
+    std::vector<LiteralValue> out;
+    out.reserve(size());
+
+    for (std::size_t i = 0; i < size(); ++i) {
+        out.emplace_back(!is_null(i));
+    }
+
+    return Column(name_, DataType::Boolean,
+                  build_array_or_throw(out, DataType::Boolean, "is_not_null"));
 }
 
 Column Column::apply_length() const {

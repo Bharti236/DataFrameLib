@@ -2,3 +2,5 @@ build/
 Todo.md
 .codex
 .venv
+__pycache__/
+*.pyc

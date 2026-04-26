@@ -645,6 +645,7 @@ LazyPlanNodePtr QueryOptimizer::clone_node_without_inputs(const LazyPlanNodePtr&
 
     auto cloned = make_optimizer_node(node->kind);
     cloned->path = node->path;
+    cloned->in_memory_table = node->in_memory_table;
     cloned->columns = node->columns;
     cloned->expressions = node->expressions;
     cloned->predicate = node->predicate;
@@ -1532,7 +1533,10 @@ std::shared_ptr<arrow::Schema> QueryOptimizer::output_schema(
             break;
 
         case LazyNodeKind::InMemorySource:
-            schema = arrow::schema({});
+            if (!root->in_memory_table) {
+                optimizer_fail("in-memory source node is missing its table");
+            }
+            schema = root->in_memory_table->schema();
             break;
     }
 

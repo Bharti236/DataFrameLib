@@ -1,10 +1,12 @@
 #pragma once
 
 #include <cstddef>
+#include <initializer_list>
 #include <map>
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "Column.h"
@@ -73,6 +75,7 @@ struct LazyPlanNode {
 
     // For scan/sink nodes.
     std::string path;
+    std::shared_ptr<arrow::Table> in_memory_table;
 
     // For select(columns), sort(columns), group_by(keys), and join(on).
     std::vector<std::string> columns;
@@ -113,6 +116,8 @@ public:
     LazyGroupBy(const LazyDataFrame& parent, std::vector<std::string> keys);
 
     LazyDataFrame aggregate(const std::map<std::string, Expression>& aggs) const;
+    LazyDataFrame aggregate(const std::vector<std::pair<std::string, std::string>>& aggs) const;
+    LazyDataFrame aggregate(std::initializer_list<std::pair<std::string, std::string>> aggs) const;
 
 private:
     const LazyDataFrame* parent_;
@@ -127,6 +132,9 @@ public:
     // Each of these should create a fresh LazyDataFrame whose root node points
     // at the previous plan as an input.
     LazyDataFrame select(const std::vector<std::string>& columns) const;
+    LazyDataFrame select(std::initializer_list<std::string> columns) const {
+        return select(std::vector<std::string>(columns));
+    }
     LazyDataFrame select(const std::vector<Expression>& expressions) const;
     LazyDataFrame filter(const Expression& predicate) const;
     LazyDataFrame with_column(const std::string& name,
@@ -170,6 +178,7 @@ private:
 // These should create leaf DAG nodes only. They must not read data yet.
 LazyDataFrame scan_csv(const std::string& path);
 LazyDataFrame scan_parquet(const std::string& path);
+LazyDataFrame lazy_from_arrow_table(std::shared_ptr<arrow::Table> table);
 
 // Detailed behavior expected later in src/Lazy.cpp:
 //

@@ -5,6 +5,8 @@
 #include <memory>
 #include <optional>
 #include <cstdint>
+#include <type_traits>
+#include <utility>
 #include "Types.h"
 #include "arrow/api.h"
 
@@ -169,6 +171,198 @@ Expression operator>=(const Expression& lhs, const Expression& rhs);
 Expression operator&(const Expression& lhs, const Expression& rhs);
 Expression operator|(const Expression& lhs, const Expression& rhs);
 Expression operator~(const Expression& expr);
+
+namespace expression_detail {
+
+inline Expression literal_expression(std::nullptr_t) {
+    return lit(nullptr);
+}
+
+inline Expression literal_expression(bool value) {
+    return lit(LiteralValue{value});
+}
+
+template <typename T,
+          std::enable_if_t<std::is_integral_v<std::decay_t<T>> &&
+                           !std::is_same_v<std::decay_t<T>, bool>, int> = 0>
+inline Expression literal_expression(T value) {
+    return lit(LiteralValue{static_cast<int64_t>(value)});
+}
+
+template <typename T,
+          std::enable_if_t<std::is_floating_point_v<std::decay_t<T>>, int> = 0>
+inline Expression literal_expression(T value) {
+    if constexpr (std::is_same_v<std::decay_t<T>, float>) {
+        return lit(LiteralValue{value});
+    }
+    return lit(LiteralValue{static_cast<double>(value)});
+}
+
+inline Expression literal_expression(const std::string& value) {
+    return lit(LiteralValue{value});
+}
+
+inline Expression literal_expression(const char* value) {
+    return lit(LiteralValue{std::string(value)});
+}
+
+} // namespace expression_detail
+
+template <typename T,
+          typename = decltype(expression_detail::literal_expression(std::declval<T>()))>
+inline Expression operator+(const Expression& lhs, T&& rhs) {
+    return lhs + expression_detail::literal_expression(std::forward<T>(rhs));
+}
+
+template <typename T,
+          typename = decltype(expression_detail::literal_expression(std::declval<T>()))>
+inline Expression operator+(T&& lhs, const Expression& rhs) {
+    return expression_detail::literal_expression(std::forward<T>(lhs)) + rhs;
+}
+
+template <typename T,
+          typename = decltype(expression_detail::literal_expression(std::declval<T>()))>
+inline Expression operator-(const Expression& lhs, T&& rhs) {
+    return lhs - expression_detail::literal_expression(std::forward<T>(rhs));
+}
+
+template <typename T,
+          typename = decltype(expression_detail::literal_expression(std::declval<T>()))>
+inline Expression operator-(T&& lhs, const Expression& rhs) {
+    return expression_detail::literal_expression(std::forward<T>(lhs)) - rhs;
+}
+
+template <typename T,
+          typename = decltype(expression_detail::literal_expression(std::declval<T>()))>
+inline Expression operator*(const Expression& lhs, T&& rhs) {
+    return lhs * expression_detail::literal_expression(std::forward<T>(rhs));
+}
+
+template <typename T,
+          typename = decltype(expression_detail::literal_expression(std::declval<T>()))>
+inline Expression operator*(T&& lhs, const Expression& rhs) {
+    return expression_detail::literal_expression(std::forward<T>(lhs)) * rhs;
+}
+
+template <typename T,
+          typename = decltype(expression_detail::literal_expression(std::declval<T>()))>
+inline Expression operator/(const Expression& lhs, T&& rhs) {
+    return lhs / expression_detail::literal_expression(std::forward<T>(rhs));
+}
+
+template <typename T,
+          typename = decltype(expression_detail::literal_expression(std::declval<T>()))>
+inline Expression operator/(T&& lhs, const Expression& rhs) {
+    return expression_detail::literal_expression(std::forward<T>(lhs)) / rhs;
+}
+
+template <typename T,
+          typename = decltype(expression_detail::literal_expression(std::declval<T>()))>
+inline Expression operator%(const Expression& lhs, T&& rhs) {
+    return lhs % expression_detail::literal_expression(std::forward<T>(rhs));
+}
+
+template <typename T,
+          typename = decltype(expression_detail::literal_expression(std::declval<T>()))>
+inline Expression operator%(T&& lhs, const Expression& rhs) {
+    return expression_detail::literal_expression(std::forward<T>(lhs)) % rhs;
+}
+
+template <typename T,
+          typename = decltype(expression_detail::literal_expression(std::declval<T>()))>
+inline Expression operator==(const Expression& lhs, T&& rhs) {
+    return lhs == expression_detail::literal_expression(std::forward<T>(rhs));
+}
+
+template <typename T,
+          typename = decltype(expression_detail::literal_expression(std::declval<T>()))>
+inline Expression operator==(T&& lhs, const Expression& rhs) {
+    return expression_detail::literal_expression(std::forward<T>(lhs)) == rhs;
+}
+
+template <typename T,
+          typename = decltype(expression_detail::literal_expression(std::declval<T>()))>
+inline Expression operator!=(const Expression& lhs, T&& rhs) {
+    return lhs != expression_detail::literal_expression(std::forward<T>(rhs));
+}
+
+template <typename T,
+          typename = decltype(expression_detail::literal_expression(std::declval<T>()))>
+inline Expression operator!=(T&& lhs, const Expression& rhs) {
+    return expression_detail::literal_expression(std::forward<T>(lhs)) != rhs;
+}
+
+template <typename T,
+          typename = decltype(expression_detail::literal_expression(std::declval<T>()))>
+inline Expression operator<(const Expression& lhs, T&& rhs) {
+    return lhs < expression_detail::literal_expression(std::forward<T>(rhs));
+}
+
+template <typename T,
+          typename = decltype(expression_detail::literal_expression(std::declval<T>()))>
+inline Expression operator<(T&& lhs, const Expression& rhs) {
+    return expression_detail::literal_expression(std::forward<T>(lhs)) < rhs;
+}
+
+template <typename T,
+          typename = decltype(expression_detail::literal_expression(std::declval<T>()))>
+inline Expression operator<=(const Expression& lhs, T&& rhs) {
+    return lhs <= expression_detail::literal_expression(std::forward<T>(rhs));
+}
+
+template <typename T,
+          typename = decltype(expression_detail::literal_expression(std::declval<T>()))>
+inline Expression operator<=(T&& lhs, const Expression& rhs) {
+    return expression_detail::literal_expression(std::forward<T>(lhs)) <= rhs;
+}
+
+template <typename T,
+          typename = decltype(expression_detail::literal_expression(std::declval<T>()))>
+inline Expression operator>(const Expression& lhs, T&& rhs) {
+    return lhs > expression_detail::literal_expression(std::forward<T>(rhs));
+}
+
+template <typename T,
+          typename = decltype(expression_detail::literal_expression(std::declval<T>()))>
+inline Expression operator>(T&& lhs, const Expression& rhs) {
+    return expression_detail::literal_expression(std::forward<T>(lhs)) > rhs;
+}
+
+template <typename T,
+          typename = decltype(expression_detail::literal_expression(std::declval<T>()))>
+inline Expression operator>=(const Expression& lhs, T&& rhs) {
+    return lhs >= expression_detail::literal_expression(std::forward<T>(rhs));
+}
+
+template <typename T,
+          typename = decltype(expression_detail::literal_expression(std::declval<T>()))>
+inline Expression operator>=(T&& lhs, const Expression& rhs) {
+    return expression_detail::literal_expression(std::forward<T>(lhs)) >= rhs;
+}
+
+template <typename T,
+          typename = decltype(expression_detail::literal_expression(std::declval<T>()))>
+inline Expression operator&(const Expression& lhs, T&& rhs) {
+    return lhs & expression_detail::literal_expression(std::forward<T>(rhs));
+}
+
+template <typename T,
+          typename = decltype(expression_detail::literal_expression(std::declval<T>()))>
+inline Expression operator&(T&& lhs, const Expression& rhs) {
+    return expression_detail::literal_expression(std::forward<T>(lhs)) & rhs;
+}
+
+template <typename T,
+          typename = decltype(expression_detail::literal_expression(std::declval<T>()))>
+inline Expression operator|(const Expression& lhs, T&& rhs) {
+    return lhs | expression_detail::literal_expression(std::forward<T>(rhs));
+}
+
+template <typename T,
+          typename = decltype(expression_detail::literal_expression(std::declval<T>()))>
+inline Expression operator|(T&& lhs, const Expression& rhs) {
+    return expression_detail::literal_expression(std::forward<T>(lhs)) | rhs;
+}
 
 // Detailed behavior expected:
 

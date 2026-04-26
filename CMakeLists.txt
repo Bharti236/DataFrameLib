@@ -19,7 +19,7 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(GVC REQUIRED IMPORTED_TARGET libgvc libcgraph)
 
 # 3. Define the Library (The core engine)
-add_library(DataFrameEngine 
+add_library(dataframelib
     src/Types.cpp
     src/Errors.cpp
     src/ArrowUtils.cpp
@@ -31,13 +31,15 @@ add_library(DataFrameEngine
     src/Optimizer.cpp
 )
 
-target_include_directories(DataFrameEngine
+add_library(DataFrameEngine ALIAS dataframelib)
+
+target_include_directories(dataframelib
     PUBLIC include
     PRIVATE include/DataFrameLib
 )
 
 # Link using the modern PkgConfig target
-target_link_libraries(DataFrameEngine PUBLIC 
+target_link_libraries(dataframelib PUBLIC 
     Arrow::arrow_shared 
     Parquet::parquet_shared 
     PkgConfig::GVC 
@@ -47,14 +49,14 @@ target_link_libraries(DataFrameEngine PUBLIC
 add_executable(df_app src/main.cpp)
 
 # Link the executable to your library
-target_link_libraries(df_app PRIVATE DataFrameEngine)
+target_link_libraries(df_app PRIVATE dataframelib)
 
 add_executable(df_smoke_tests tests/eager_smoke.cpp)
-target_link_libraries(df_smoke_tests PRIVATE DataFrameEngine)
+target_link_libraries(df_smoke_tests PRIVATE dataframelib)
 
 add_test(NAME eager_smoke COMMAND df_smoke_tests)
 
 add_executable(df_lazy_smoke_tests tests/lazy_smoke.cpp)
-target_link_libraries(df_lazy_smoke_tests PRIVATE DataFrameEngine)
+target_link_libraries(df_lazy_smoke_tests PRIVATE dataframelib)
 
 add_test(NAME lazy_smoke COMMAND df_lazy_smoke_tests)

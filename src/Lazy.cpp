@@ -63,6 +63,9 @@ JoinType parse_join_type_or_throw(const std::string& how) {
     if (normalized == "full") {
         return JoinType::Full;
     }
+    if (normalized == "outer") {
+        return JoinType::Full;
+    }
 
     throw DataFrameError("invalid join type: " + how);
 }
@@ -641,6 +644,41 @@ std::string unique_name(std::unordered_set<std::string>& seen, const std::string
     return candidate;
 }
 
+std::map<std::string, Expression> normalize_named_aggregations(
+    const std::vector<std::pair<std::string, std::string>>& aggs) {
+    std::map<std::string, Expression> named;
+    std::unordered_set<std::string> seen_names;
+
+    for (const auto& [column_name, op_name] : aggs) {
+        const std::string normalized_op = lowercase_ascii(op_name);
+
+        Expression expr = [&]() -> Expression {
+            if (normalized_op == "sum") {
+                return col(column_name).sum();
+            }
+            if (normalized_op == "mean") {
+                return col(column_name).mean();
+            }
+            if (normalized_op == "count") {
+                return col(column_name).count();
+            }
+            if (normalized_op == "min") {
+                return col(column_name).min();
+            }
+            if (normalized_op == "max") {
+                return col(column_name).max();
+            }
+
+            throw DataFrameError("unsupported aggregation: " + op_name);
+        }();
+
+        const std::string output_name = unique_name(seen_names, column_name + "_" + normalized_op);
+        named.emplace(output_name, std::move(expr));
+    }
+
+    return named;
+}
+
 std::string group_key_for_row(const std::vector<Column>& key_columns, std::size_t row) {
     std::ostringstream out;
     for (const auto& column : key_columns) {
@@ -797,8 +835,13 @@ EagerDataFrame execute_join(const LazyPlanNodePtr& node,
     std::vector<Column> right_columns = dataframe_columns(right_df);
     std::vector<Column> left_keys;
     std::vector<Column> right_keys;
+    std::unordered_map<std::string, std::size_t> right_index_by_name;
     left_keys.reserve(node->columns.size());
     right_keys.reserve(node->columns.size());
+    right_index_by_name.reserve(right_columns.size());
+    for (std::size_t i = 0; i < right_columns.size(); ++i) {
+        right_index_by_name.emplace(right_columns[i].name(), i);
+    }
     for (const auto& key : node->columns) {
         left_keys.push_back(left_df.column(key));
         right_keys.push_back(right_df.column(key));
@@ -835,6 +878,11 @@ EagerDataFrame execute_join(const LazyPlanNodePtr& node,
             if (spec.from_left) {
                 if (left_row.has_value()) {
                     output_values[out_idx].push_back(left_columns[spec.index].value_at(*left_row));
+                } else if (right_row.has_value() &&
+                           join_keys.count(left_columns[spec.index].name()) > 0 &&
+                           right_index_by_name.count(left_columns[spec.index].name()) > 0) {
+                    const std::size_t right_index = right_index_by_name.at(left_columns[spec.index].name());
+                    output_values[out_idx].push_back(right_columns[right_index].value_at(*right_row));
                 } else {
                     output_values[out_idx].push_back(NullType{});
                 }
@@ -1092,8 +1140,19 @@ EagerDataFrame execute_plan_impl(const LazyPlanNodePtr& plan,
 
             case LazyNodeKind::SinkCsv:
             case LazyNodeKind::SinkParquet:
-            case LazyNodeKind::InMemorySource:
                 throw DataFrameError("unsupported lazy node kind in collect()");
+
+            case LazyNodeKind::InMemorySource: {
+                if (!plan->in_memory_table) {
+                    throw SchemaError("in-memory source node is missing its table");
+                }
+
+                EagerDataFrame df = from_arrow_table(plan->in_memory_table);
+                if (!plan->columns.empty()) {
+                    df = df.select(plan->columns);
+                }
+                return df;
+            }
         }
 
         throw DataFrameError("unknown lazy node kind");
@@ -1119,6 +1178,16 @@ LazyDataFrame LazyGroupBy::aggregate(const std::map<std::string, Expression>& ag
     auto aggregate_node = make_unary_node(LazyNodeKind::Aggregate, group_node);
     aggregate_node->aggregations = aggs;
     return LazyDataFrame(std::move(aggregate_node));
+}
+
+LazyDataFrame LazyGroupBy::aggregate(
+    const std::vector<std::pair<std::string, std::string>>& aggs) const {
+    return aggregate(normalize_named_aggregations(aggs));
+}
+
+LazyDataFrame LazyGroupBy::aggregate(
+    std::initializer_list<std::pair<std::string, std::string>> aggs) const {
+    return aggregate(std::vector<std::pair<std::string, std::string>>(aggs));
 }
 
 LazyDataFrame::LazyDataFrame(LazyPlanNodePtr plan)
@@ -1257,5 +1326,17 @@ LazyDataFrame scan_csv(const std::string& path) {
 LazyDataFrame scan_parquet(const std::string& path) {
     auto node = make_node(LazyNodeKind::ScanParquet);
     node->path = path;
+    return LazyDataFrame(std::move(node));
+}
+
+LazyDataFrame lazy_from_arrow_table(std::shared_ptr<arrow::Table> table) {
+    if (!table) {
+        lazy_fail("cannot create a lazy dataframe from a null Arrow table");
+    }
+
+    (void)from_arrow_table(table);
+
+    auto node = make_node(LazyNodeKind::InMemorySource);
+    node->in_memory_table = std::move(table);
     return LazyDataFrame(std::move(node));
 }
