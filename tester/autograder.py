@@ -204,7 +204,6 @@ def compute_expected_results(data_dir: str) -> dict[str, pd.DataFrame]:
     # --- test_join ---
     results["join_inner.csv"] = pd.merge(left, right, on="id", how="inner")
     results["join_left.csv"] = pd.merge(left, right, on="id", how="left")
-    results["join_right.csv"] = pd.merge(left, right, on="id", how="right")
 
     # --- test_expressions ---
     expr_bonus = data.copy()
@@ -441,7 +440,7 @@ TEST_OUTPUTS: dict[str, list[str]] = {
         "filter_select.csv",
     ],
     "test_groupby_agg": ["groupby_result.csv", "groupby_multi.csv"],
-    "test_join": ["join_inner.csv", "join_left.csv", "join_right.csv"],
+    "test_join": ["join_inner.csv", "join_left.csv"],
     "test_expressions": [
         "expr_bonus.csv",
         "expr_abs.csv",

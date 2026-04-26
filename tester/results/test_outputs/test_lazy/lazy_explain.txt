@@ -1,0 +1,9 @@
+digraph QueryPlan {
+  rankdir=BT;
+  node [shape=box, style=filled, fillcolor=lightyellow];
+  n0 [label="Select\n[name, salary]"];
+  n1 [label="Filter\n(predicate)"];
+  n2 [label="Scan\n/Users/abowtiekindofguy/Teaching/COP290/A4/tester/results/test_data/data.csv (csv)"];
+  n2 -> n1;
+  n1 -> n0;
+}
